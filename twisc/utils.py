@@ -4,6 +4,7 @@ import pandas as pd
 from time import sleep
 from datetime import datetime
 from selenium import webdriver
+import urllib.request as request
 import geckodriver_autoinstaller
 import chromedriver_autoinstaller
 from selenium.webdriver.common.by import By
@@ -237,3 +238,9 @@ def keep_scrolling(driver, data, writer, tweet_ids, scrolling, tweet_parsed, lim
                 last_position = curr_position
                 break
     return driver, data, writer, tweet_ids, scrolling, tweet_parsed, scroll, last_position
+
+
+def download_images(urls, save_dir):
+    for i, url_v in enumerate(urls):
+        for j, url in enumerate(url_v):
+            request.urlretrieve(url, save_dir + '/' + str(i + 1) + '_' + str(j + 1) + ".jpg")
