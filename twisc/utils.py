@@ -8,6 +8,9 @@ import urllib.request as request
 import geckodriver_autoinstaller
 import chromedriver_autoinstaller
 from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from environment import EMAIL, USERNAME, PASSWORD
+from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
 
@@ -86,6 +89,118 @@ def get_data(card, save_images=False, save_dir=None):
     tweet = (
         username, handle, postdate, text, embedded, emojis, reply_cnt, retweet_cnt, like_cnt, image_links, tweet_url)
     return tweet
+
+
+def get_users_follow(users, headless, follow=None, verbose=1, wait=2, limit=float('inf')):
+    """
+    Get the following or followers of a list of users
+    """
+
+    # initiate the driver
+    driver = init_driver(headless=headless, firefox=True)
+    sleep(wait)
+    # log in (the .env file should contain the username and password)
+    # driver.get('https://www.twitter.com/login')
+    log_in(driver, wait=wait)
+    sleep(wait)
+    # followers and following dict of each user
+    follows_users = {}
+    for user in users:
+        # if the login fails, find the new log in button and log in again.
+        if check_exists_by_link_text("Log in", driver):
+            print("Login failed. Retry...")
+            login = driver.find_element_by_link_text("Log in")
+            sleep(random.uniform(wait - 0.5, wait + 0.5))
+            driver.execute_script("arguments[0].click();", login)
+            sleep(random.uniform(wait - 0.5, wait + 0.5))
+            sleep(wait)
+            log_in(driver)
+            sleep(wait)
+        # case 2
+        if check_exists_by_xpath('//input[@name="session[username_or_email]"]', driver):
+            print("Login failed. Retry...")
+            sleep(wait)
+            log_in(driver)
+            sleep(wait)
+        print("Crawling " + user + " " + follow)
+        driver.get('https://twitter.com/' + user + '/' + follow)
+        sleep(random.uniform(wait - 0.5, wait + 0.5))
+        # check if we must keep scrolling
+        scrolling = True
+        last_position = driver.execute_script("return window.pageYOffset;")
+        follows_elem = []
+        follow_ids = set()
+        is_limit = False
+        while scrolling and not is_limit:
+            # get the card of following or followers
+            # this is the primary_column attribute that contains both followings and followers
+            primary_column = driver.find_element(by=By.XPATH, value='//div[contains(@data-testid,"primary_column")]')
+            # extract only the User-cell
+            page_cards = primary_column.find_elements(by=By.XPATH, value='//div[contains(@data-testid,"UserCell")]')
+            for card in page_cards:
+                # get the following or followers element
+                element = card.find_element(by=By.XPATH, value='.//div[1]/div[1]/div[1]//a[1]')
+                follow_elem = element.get_attribute('href')
+                # append to the list
+                follow_id = str(follow_elem)
+                follow_elem = '@' + str(follow_elem).split('/')[-1]
+                if follow_id not in follow_ids:
+                    follow_ids.add(follow_id)
+                    follows_elem.append(follow_elem)
+                if len(follows_elem) >= limit:
+                    is_limit = True
+                    break
+                if verbose:
+                    print(follow_elem)
+            print("Found " + str(len(follows_elem)) + " " + follow)
+            scroll_attempt = 0
+            while not is_limit:
+                sleep(random.uniform(wait - 0.5, wait + 0.5))
+                driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
+                sleep(random.uniform(wait - 0.5, wait + 0.5))
+                curr_position = driver.execute_script("return window.pageYOffset;")
+                if last_position == curr_position:
+                    scroll_attempt += 1
+                    # end of scroll region
+                    if scroll_attempt >= 2:
+                        scrolling = False
+                        break
+                    else:
+                        sleep(random.uniform(wait - 0.5, wait + 0.5))  # attempt another scroll
+                else:
+                    last_position = curr_position
+                    break
+        follows_users[user] = follows_elem
+    return follows_users
+
+
+def log_in(driver, wait=4):
+    driver.get('https://twitter.com/i/flow/login')
+    email_xpath = '//input[@autocomplete="username"]'
+    password_xpath = '//input[@autocomplete="current-password"]'
+    username_xpath = '//input[@data-testid="ocfEnterTextTextInput"]'
+    sleep(random.uniform(wait, wait + 1))
+    # enter email
+    email_el = driver.find_element(by=By.XPATH, value=email_xpath)
+    sleep(random.uniform(wait, wait + 1))
+    email_el.send_keys(EMAIL)
+    sleep(random.uniform(wait, wait + 1))
+    email_el.send_keys(Keys.RETURN)
+    sleep(random.uniform(wait, wait + 1))
+    # in case twitter spotted unusual login activity : enter your username
+    if check_exists_by_xpath(username_xpath, driver):
+        username_el = driver.find_element(by=By.XPATH, value=username_xpath)
+        sleep(random.uniform(wait, wait + 1))
+        username_el.send_keys(USERNAME)
+        sleep(random.uniform(wait, wait + 1))
+        username_el.send_keys(Keys.RETURN)
+        sleep(random.uniform(wait, wait + 1))
+    # enter password
+    password_el = driver.find_element(by=By.XPATH, value=password_xpath)
+    password_el.send_keys(PASSWORD)
+    sleep(random.uniform(wait, wait + 1))
+    password_el.send_keys(Keys.RETURN)
+    sleep(random.uniform(wait, wait + 1))
 
 
 def init_driver(headless=True, proxy=None, show_images=False, option=None, firefox=False):
@@ -238,6 +353,22 @@ def keep_scrolling(driver, data, writer, tweet_ids, scrolling, tweet_parsed, lim
                 last_position = curr_position
                 break
     return driver, data, writer, tweet_ids, scrolling, tweet_parsed, scroll, last_position
+
+
+def check_exists_by_link_text(text, driver):
+    try:
+        driver.find_element_by_link_text(text)
+    except NoSuchElementException:
+        return False
+    return True
+
+
+def check_exists_by_xpath(xpath, driver):
+    try:
+        driver.find_element(by=By.XPATH, value=xpath)
+    except NoSuchElementException:
+        return False
+    return True
 
 
 def download_images(urls, save_dir):
