@@ -1,4 +1,5 @@
 import random
+import json
 from . import utils
 from time import sleep
 
@@ -32,7 +33,6 @@ def get_user_information(users, driver=None, headless=True):
             except Exception as e:
                 print(e)
                 desc = ""
-            a = 0
             try:
                 join_date = driver.find_element_by_xpath(
                     '//div[contains(@data-testid,"UserProfileHeader_Items")]/span[3]').text
@@ -47,7 +47,7 @@ def get_user_information(users, driver=None, headless=True):
                         '//div[contains(@data-testid,"UserProfileHeader_Items")]/span[2]').text
                     span1 = driver.find_element_by_xpath(
                         '//div[contains(@data-testid,"UserProfileHeader_Items")]/span[1]').text
-                    if hasNumbers(span1):
+                    if has_numbers(span1):
                         birthday = span1
                         location = ""
                     else:
@@ -82,7 +82,35 @@ def get_user_information(users, driver=None, headless=True):
             continue
 
 
+def get_users_followers(users, env, verbose=1, headless=True, limit=float('inf'), file_path=None):
+    followers = utils.get_users_follow(users, headless, env, "followers", verbose, limit=limit)
+    if file_path is None:
+        file_path = 'outputs/' + str(users[0]) + '_' + str(users[-1]) + '_' + 'followers.json'
+    else:
+        file_path = file_path + str(users[0]) + '_' + str(users[-1]) + '_' + 'followers.json'
+    with open(file_path, 'w') as f:
+        json.dump(followers, f)
+        print(f"file saved in {file_path}")
+    return followers
+
+
+def get_users_following(users, env, verbose=1, headless=True, limit=float('inf'), file_path=None):
+    following = utils.get_users_follow(users, headless, env, "following", verbose, limit=limit)
+    if file_path is None:
+        file_path = 'outputs/' + str(users[0]) + '_' + str(users[-1]) + '_' + 'following.json'
+    else:
+        file_path = file_path + str(users[0]) + '_' + str(users[-1]) + '_' + 'following.json'
+    with open(file_path, 'w') as f:
+        json.dump(following, f)
+        print(f"file saved in {file_path}")
+    return following
+
+
 def log_user_page(user, driver):
     sleep(random.uniform(1, 2))
     driver.get('https://twitter.com/' + user)
     sleep(random.uniform(1, 2))
+
+
+def has_numbers(inputString):
+    return any(char.isdigit() for char in inputString)
